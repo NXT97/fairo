@@ -204,3 +204,28 @@ class GraspClient:
             "Unable to find any grasps after filtering, for any of the"
             f" {len(obj_pcds)} objects"
         )
+
+    def get_filtered_obj_grasps(
+        self,
+        obj_pcd: o3d.geometry.PointCloud,
+        scene_pcd: o3d.geometry.PointCloud,
+    ):
+        """
+        Get grasps for each object pointcloud, then filter by
+        checking collisions against the scene pointcloud.
+        """
+        
+        print(f"Getting filtered obj grasp...")
+        grasp_group = self.get_grasps(obj_pcd)
+        filtered_grasp_group = self.get_collision(grasp_group, scene_pcd)
+        if len(filtered_grasp_group) < len(grasp_group):
+            print(
+                "Filtered"
+                f" {len(grasp_group) - len(filtered_grasp_group)}/{len(grasp_group)} grasps"
+                " due to collision."
+            )
+        if len(filtered_grasp_group) > 0:
+            return filtered_grasp_group
+        raise Exception(
+            "Unable to find any grasps after filtering"
+        )

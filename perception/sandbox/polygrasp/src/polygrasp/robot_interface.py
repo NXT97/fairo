@@ -1,11 +1,12 @@
 """polymetis.RobotInterface combined with GripperInterface, with an additional `grasp` method."""
 
+from itertools import count
 import time
 import numpy as np
 import logging
 from scipy.spatial.transform import Rotation as R
 import torch
-
+from polymetis import GripperInterface
 import hydra
 import graspnetAPI
 import polymetis
@@ -79,8 +80,8 @@ class GraspingRobotInterface(polymetis.RobotInterface):
     def __init__(
         self,
         gripper: polymetis.GripperInterface,
-        k_approach=1.5,
-        k_grasp=0.72,
+        k_approach= 1.5,    #0.5,
+        k_grasp=0.72,       #0.25,
         gripper_max_width=0.085,
         # ikpy params:
         base_elements=("panda_link0",),
@@ -97,9 +98,11 @@ class GraspingRobotInterface(polymetis.RobotInterface):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.gripper = hydra.utils.instantiate(gripper)
-
+        # self.gripper = hydra.utils.instantiate(gripper)
+        self.gripper = GripperInterface(ip_address="172.16.0.1")
         self.default_ee_quat = torch.Tensor([1, 0, 0, 0])
+        # self.default_ee_quat = torch.Tensor([0.87, 0.4, 0.26, 0.14])
+        # self.default_ee_quat = torch.Tensor([0.00, 0.707, 0.00, 0.707])
         self.k_approach = k_approach
         self.k_grasp = k_grasp
         self.gripper_max_width = gripper_max_width
@@ -165,13 +168,20 @@ class GraspingRobotInterface(polymetis.RobotInterface):
         return states
 
     def check_feasibility(self, point: np.ndarray):
-        return self.ik(point) is not None
+        # return self.ik(point) is not None
+        return self.ik(point)
 
     def select_grasp(
         self, grasps: graspnetAPI.GraspGroup, num_grasp_choices=5
     ) -> graspnetAPI.Grasp:
         with torch.no_grad():
             feasible_i = []
+            pre_grasp = np.zeros((3,num_grasp_choices))
+            approach = np.zeros((3,num_grasp_choices))
+            pre_grasp_jpos = np.zeros((7,num_grasp_choices))
+            approach_jpos = np.zeros((7,num_grasp_choices))
+            # idx = {}
+            count = 0
             for i, grasp in enumerate(grasps):
                 log.info(f"checking feasibility {i}/{len(grasps)}")
 
@@ -183,23 +193,41 @@ class GraspingRobotInterface(polymetis.RobotInterface):
                 )
                 point_a = grasp_point + self.k_approach * grasp_approach_delta
                 point_b = grasp_point + self.k_grasp * grasp_approach_delta
-
-                if self.check_feasibility(point_a) and self.check_feasibility(point_b):
+                # if self.check_feasibility(point_a) and self.check_feasibility(point_b):
+                point_a_jpos = self.check_feasibility(point_a)
+                point_b_jpos = self.check_feasibility(point_b)
+                if (point_a_jpos is not None)  and (point_b_jpos is not None):
                     feasible_i.append(i)
+                    pre_grasp[:,count] = point_b
+                    approach[:,count] = point_a
+                    pre_grasp_jpos[:,count] = point_b_jpos
+                    approach_jpos[:,count] = point_a_jpos
+                    # idx[count] = i
+                    count +=1
 
                 if len(feasible_i) == num_grasp_choices:
                     if i >= num_grasp_choices:
                         log.info(
                             f"Kinematically filtered {i + 1 - num_grasp_choices} grasps"
-                            " to get 5 feasible positions"
+                            " to get " + str(len(feasible_i)) + " feasible positions"
                         )
                     break
-
+            # print(count)
+            if(count == 0):
+                return [], 0, [], [], [], []
             # Choose the grasp closest to the neutral position
             filtered_grasps = grasps[feasible_i]
             grasp, i = min_dist_grasp_no_z(self.default_ee_quat, filtered_grasps)
-            log.info(f"Closest grasp to ee ori, within top 5: {i + 1}")
-            return filtered_grasps, i
+            # key_list = list(idx.keys())
+            # val_list = list(idx.values())
+            # print key with val 100
+            # print(idx)
+            # print(key_list)
+            # print(val_list)
+            # position = val_list.index(i)
+            log.info(f"Closest grasp to ee ori: {i + 1}")
+            # return filtered_grasps, i, pre_grasp[:,key_list[position]]
+            return filtered_grasps, i, pre_grasp, approach, pre_grasp_jpos, approach_jpos
 
     def grasp(
         self,

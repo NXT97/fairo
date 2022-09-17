@@ -12,6 +12,14 @@ polygrasp_setup_commands = [
     ["pip", "install", "-e", "."],
 ]
 
+
+polygrasp_shared_env = mrp.Conda.SharedEnv(
+    "polygrasp",
+    channels=["pytorch", "fair-robotics", "aihabitat", "conda-forge"],
+    dependencies=["polymetis"],
+    setup_commands=polygrasp_setup_commands,
+)
+
 mrp.process(
     name="segmentation_server",
     runtime=mrp.Conda(
@@ -37,30 +45,53 @@ mrp.process(
     ),
 )
 
-polygrasp_shared_env = mrp.Conda.SharedEnv(
-    "polygrasp",
-    channels=["pytorch", "fair-robotics", "aihabitat", "conda-forge"],
-    dependencies=["polymetis"],
-    setup_commands=polygrasp_setup_commands,
-)
+# mrp.process(
+#     name="cam_pub",
+#     runtime=mrp.Conda(
+#         shared_env=polygrasp_shared_env,
+#         run_command=["python", "-m", "polygrasp.cam_pub_sub"],
+#     ),
+# )
+
+# mrp.process(
+#     name="gripper_server",
+#     runtime=mrp.Conda(
+#         shared_env=polygrasp_shared_env,
+#         run_command=[
+#             "launch_gripper.py",
+#             "gripper=robotiq_2f",
+#             "gripper.comport=/dev/ttyUSB0",
+#         ],
+#     ),
+# )
 
 mrp.process(
-    name="cam_pub",
+    name="voxel",
     runtime=mrp.Conda(
         shared_env=polygrasp_shared_env,
-        run_command=["python", "-m", "polygrasp.cam_pub_sub"],
+        run_command=["python", "-m", "voxel"],
     ),
 )
 
 mrp.process(
-    name="gripper_server",
+    name="stormgrasp",
     runtime=mrp.Conda(
         shared_env=polygrasp_shared_env,
-        run_command=[
-            "launch_gripper.py",
-            "gripper=robotiq_2f",
-            "gripper.comport=/dev/ttyUSB1",
-        ],
+        run_command=["python", "-m", "storm_grasp"],
+    ),
+)
+mrp.process(
+    name="empty_plate",
+    runtime=mrp.Conda(
+        shared_env=polygrasp_shared_env,
+        run_command=["python", "-m", "empty_plate"],
+    ),
+)
+mrp.process(
+    name="grasp_object",
+    runtime=mrp.Conda(
+        shared_env=polygrasp_shared_env,
+        run_command=["python", "-m", "grasp_object"],
     ),
 )
 

@@ -134,8 +134,8 @@ def main(cfg):
 
     print("Initialize robot & gripper")
     robot = hydra.utils.instantiate(cfg.robot)
-    robot.gripper_open()
-    robot.go_home()
+    # robot.gripper_open()
+    # robot.go_home()
 
     print("Initializing cameras")
     cfg.cam.intrinsics_file = hydra.utils.to_absolute_path(cfg.cam.intrinsics_file)
@@ -185,7 +185,13 @@ def main(cfg):
             )
 
             print("Getting rgbd and pcds..")
-            rgbd = cameras.get_rgbd()
+            while(cameras.done != True):
+                time.sleep(0.1)
+                # print("Waiting")
+            print("Done waiting")
+            # cameras.sub = None
+            rgbd = cameras.recent_rgbd
+            # rgbd = cameras.get_rgbd()
 
             rgbd_masked = rgbd * masks[:, :, :, None]
             scene_pcd = cameras.get_pcd(rgbd)
@@ -194,9 +200,13 @@ def main(cfg):
             print("Segmenting image...")
             unmerged_obj_pcds = []
             for i in range(cameras.n_cams):
-                obj_masked_rgbds, obj_masks = segmentation_client.segment_img(
-                    rgbd_masked[i], min_mask_size=cfg.min_mask_size
-                )
+                try:
+                    obj_masked_rgbds, obj_masks = segmentation_client.segment_img(
+                        rgbd_masked[i], min_mask_size=cfg.min_mask_size
+                    )
+                except:
+                    cameras.sub = None
+                    return
                 unmerged_obj_pcds += [
                     cameras.get_pcd_i(obj_masked_rgbd, i)
                     for obj_masked_rgbd in obj_masked_rgbds
@@ -212,9 +222,13 @@ def main(cfg):
                 break
 
             print("Getting grasps per object...")
-            obj_i, filtered_grasp_group = grasp_client.get_obj_grasps(
-                obj_pcds, scene_pcd
-            )
+            try:
+                obj_i, filtered_grasp_group = grasp_client.get_obj_grasps(
+                    obj_pcds, scene_pcd
+                )
+            except:
+                cameras.sub = None
+                return
 
             print("Choosing a grasp for the object")
             final_filtered_grasps, chosen_grasp_i = robot.select_grasp(
@@ -227,10 +241,11 @@ def main(cfg):
                 obj_pcds[obj_i], final_filtered_grasps, name="obj"
             )
 
-            traj = execute_grasp(robot, chosen_grasp, hori_offset, time_to_go)
+            # traj = execute_grasp(robot, chosen_grasp, hori_offset, time_to_go)
 
-            print("Going home")
-            robot.go_home()
+            # print("Going home")
+            # robot.go_home()
+    cameras.sub = None
 
 
 if __name__ == "__main__":

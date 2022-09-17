@@ -23,10 +23,23 @@ class CameraSubscriber:
 
         assert len(self.intrinsics) == len(self.extrinsics)
         self.n_cams = len(self.intrinsics)
-
-        self.sub = a0.SubscriberSync(topic, a0.INIT_MOST_RECENT, a0.ITER_NEWEST)
+        self.done = False
+        self.rgbds = None
+        self.sub = None
+        # self.sub = a0.RemoteSubscriber("172.16.0.3", topic, self.cback, a0.INIT_AWAIT_NEW, a0.ITER_NEXT)
+        self.sub = a0.RemoteSubscriber("172.16.0.3", topic, self.cback, a0.INIT_AWAIT_NEW, a0.ITER_NEWEST)
+        # self.sub = a0.RemoteSubscriber("172.16.0.3", topic, self.cback, a0.INIT_MOST_RECENT, a0.ITER_NEWEST)
+        # self.sub = a0.SubscriberSync(topic, a0.INIT_MOST_RECENT, a0.ITER_NEWEST)
         self.recent_rgbd = None
 
+    def cback(self, pkt):
+        # self.done = True
+        self.recent_rgbd = serdes.bytes_to_np(pkt.payload)
+        if (self.recent_rgbd is not None):
+            self.done = True
+        # print(f"Got {pkt.payload}")
+        # print("Got message")
+        
     def get_rgbd(self):
         if self.sub.can_read():
             self.recent_rgbd = serdes.bytes_to_np(self.sub.read().payload)
@@ -129,7 +142,22 @@ if __name__ == "__main__":
         json.dump(intrinsics_py, f, indent=4)
 
     rgbd_pub = a0.Publisher(topic)
+    ######################
+    s = CameraSubscriber()
+    pcs = PointCloudSubscriber(cs)
+    merged_pc = pcs.get_pcd()
+    ply = merged_pc.save_to_ply("m.ply")
 
+    # Set options to the desired values
+    # In this example we'll generate a textual PLY with normals (mesh is already created by default)
+    # ply.set_option(rs.save_to_ply.option_ply_binary, False)
+    # ply.set_option(rs.save_to_ply.option_ply_normals, True)
+
+    print("Saving to m.ply...")
+    # Apply the processing block to the frameset which contains the depth frame and the texture
+    ply.process(colorized)
+    print("Done")
+    ########################
     log.info(f"Starting camera logger with {cameras.get_num_cameras()} cameras...")
     while True:
         img_bytes = serdes.np_to_bytes(cameras.get_rgbd())
